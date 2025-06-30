@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const ApprovalHistory = () => {
   const [shifts, setShifts] = useState([]);
@@ -35,22 +37,56 @@ const ApprovalHistory = () => {
   useEffect(() => {
     fetchShifts();
   }, []);
-
   const handleDownload = () => {
-    const csvContent = [
-      ['NIC', 'Officer Type', 'Officer ID', 'Action', 'Remarks', 'Time Stamp'],
-      ...filteredShifts.map(row =>
-        [row.nic, row.officerType, row.officerId, row.action, row.remarks, row.timeStamp]
-      ),
-    ].map(e => e.join(',')).join('\n');
+    const doc = new jsPDF();
+    const logo = new Image();
+    logo.src = '/logo.png'; // Make sure logo.png is in the public folder
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.setAttribute("download", "approval_history.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const currentTime = new Date();
+    const formattedTime = currentTime.toLocaleTimeString();
+    const formattedDate = new Date(dateFilter).toLocaleDateString();
+
+    logo.onload = () => {
+      doc.addImage(logo, "PNG", 10, 10, 30, 20);
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("Approval History Report", 105, 20, null, null, "center");
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Date: ${formattedDate}`, 105, 27, null, null, "center");
+      doc.text(`Downloaded at: ${formattedTime}`, 105, 32, null, null, "center");
+
+      autoTable(doc, {
+        startY: 40,
+        head: [["NIC", "Officer Type", "Officer ID", "Action", "Remarks", "Time Stamp"]],
+        body: filteredShifts.map(shift => [
+          shift.nic,
+          shift.officerType,
+          shift.officerId,
+          shift.action,
+          shift.remarks,
+          shift.timeStamp
+        ]),
+        theme: "grid",
+        headStyles: { fillColor: [92, 158, 245] },
+        styles: { fontSize: 9 },
+        didDrawPage: function (data) {
+          const pageCount = doc.internal.getNumberOfPages();
+          const pageSize = doc.internal.pageSize;
+          const pageHeight = pageSize.height || pageSize.getHeight();
+          doc.setFontSize(10);
+          doc.text(
+            `Page ${data.pageNumber} of ${pageCount}`,
+            pageSize.width / 2,
+            pageHeight - 10,
+            { align: "center" }
+          );
+        },
+      });
+
+      doc.save(`approval_history_report_${dateFilter}.pdf`);
+    };
   };
 
   return (

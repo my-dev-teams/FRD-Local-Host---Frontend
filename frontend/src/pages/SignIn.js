@@ -48,28 +48,44 @@ const SignIn = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Microsoft login for internal user
+  // ✅ Microsoft login for internal user (with cancel handling)
   const handleEmailClick = () => {
-    instance.loginPopup(loginRequest).then((response) => {
-      const email = response.account.username;
+    setErrorMessage(""); // Clear any previous errors
 
-      axios
-        .post(
-          "http://localhost:8082/api/auth/internal",
-          { email },
-          { withCredentials: true }
-        )
-        .then((res) => {
-          if (res.data.startsWith("redirect:")) {
-            navigate(res.data.replace("redirect:", ""));
-          } else {
-            setErrorMessage("Access Denied");
-          }
-        })
-        .catch(() => {
-          setErrorMessage("Something went wrong");
-        });
-    });
+    instance
+      .loginPopup(loginRequest)
+      .then((response) => {
+        const email = response.account.username;
+
+        axios
+          .post(
+            "http://localhost:8082/api/auth/internal",
+            { email },
+            { withCredentials: true }
+          )
+          .then((res) => {
+            if (res.data.startsWith("redirect:")) {
+              navigate(res.data.replace("redirect:", ""));
+            } else {
+              setErrorMessage("Access Denied");
+            }
+          })
+          .catch(() => {
+            setErrorMessage("Something went wrong");
+          });
+      })
+      .catch((error) => {
+        if (error.errorCode === "user_cancelled") {
+          // User cancelled Microsoft popup
+          setFormData((prev) => ({
+            ...prev,
+            internal: { email: "" },
+          }));
+        } else {
+          setErrorMessage("Microsoft login failed. Please try again.");
+          console.error("MSAL Error:", error);
+        }
+      });
   };
 
   const handleSubmit = async (e) => {
@@ -79,24 +95,24 @@ const SignIn = () => {
     if (!validateForm()) return;
 
     try {
-const currentData = activeTab === 0 ? formData.company : formData.internal;
+      const currentData = activeTab === 0 ? formData.company : formData.internal;
 
-const response = await axios.post(
-  "http://localhost:8082/api/auth/login",
-  null,
-  {
-    params:
-      activeTab === 0
-        ? {
-            username: currentData.username,
-            password: currentData.password,
-          }
-        : {
-            email: currentData.email,
-          },
-    withCredentials: true,
-  }
-);
+      const response = await axios.post(
+        "http://localhost:8082/api/auth/login",
+        null,
+        {
+          params:
+            activeTab === 0
+              ? {
+                  username: currentData.username,
+                  password: currentData.password,
+                }
+              : {
+                  email: currentData.email,
+                },
+          withCredentials: true,
+        }
+      );
 
       if (response.data.startsWith("redirect:")) {
         alert("Login Successful!");
@@ -266,6 +282,9 @@ const response = await axios.post(
               {errors.company.password && (
                 <p style={styles.error}>{errors.company.password}</p>
               )}
+
+              {errorMessage && <p style={styles.error}>{errorMessage}</p>}
+
               <button type="submit" style={styles.signInButton}>
                 Sign In
               </button>
